@@ -49,9 +49,12 @@ vector<Vehicle> Planner::generatePredictions(double t) {
     }
 }
 
-void Planner::getPreviousPath(const vector<double>& previous_path_x, const vector<double>& previous_path_y) {
+void Planner::getPreviousPath(const vector<double>& previous_path_x, const vector<double>& previous_path_y,
+                              double end_path_s, double end_path_d) {
     _previous_path_x = previous_path_x;
     _previous_path_y = previous_path_y;
+    _end_path_s = end_path_s;
+    _end_path_d = end_path_d;
 }
 
 bool Planner::getFrontVehicle(int lane, Vehicle& front_vehicle) {
@@ -87,17 +90,9 @@ int Planner::behaviorPlanning() {
 // given the target position
 vector<vector<double>> Planner::generateTrajectory(int target_lane) {
     vector<vector<double>> trajectory(2); // [0]: x, [1]: y
-    Vehicle front_vehicle;
-    bool found = getFrontVehicle(target_lane, front_vehicle);
-    double target_speed = SPEED_LIMIT, target_s = 30;
-    if (found) {
-        target_speed = front_vehicle._v;
-        target_s = _road.distance(front_vehicle, _ego);
-    }
-    cout << "targe speed: " << target_speed  << endl;
-    cout << "target s: " << target_s << " ego s: " << _ego._s << endl;
-    
+   
     int prev_size = _previous_path_x.size();
+    double end_s = (prev_size > 0)? _end_path_s : _ego._s;
 
     vector<double> ptsx;
     vector<double> ptsy;
@@ -116,11 +111,11 @@ vector<vector<double>> Planner::generateTrajectory(int target_lane) {
         ptsy.push_back(prev_car_y);
         ptsy.push_back(_ego._y);
     } else {
-        ref_x = _previous_path_x[1];
-        ref_y = _previous_path_y[1];
+        ref_x = _previous_path_x[prev_size-1];
+        ref_y = _previous_path_y[prev_size-1];
 
-        double ref_x_prev = _previous_path_x[0];
-        double ref_y_prev = _previous_path_y[0];
+        double ref_x_prev = _previous_path_x[prev_size-2];
+        double ref_y_prev = _previous_path_y[prev_size-2];
         
         ref_yaw = atan2(ref_y - ref_y_prev, ref_x - ref_x_prev);
         ptsx.push_back(ref_x_prev);
@@ -128,14 +123,32 @@ vector<vector<double>> Planner::generateTrajectory(int target_lane) {
 
         ptsy.push_back(ref_y_prev);
         ptsy.push_back(ref_y);
+
+        cout << "ref_x: " << ref_x << " ref_x_prev: " << ref_x_prev << endl;
     }
 
+    Vehicle front_vehicle;
+    bool found = getFrontVehicle(target_lane, front_vehicle);
+    double target_speed = SPEED_LIMIT, target_s = 30;
+    if (found) {
+        target_speed = front_vehicle._v;
+        cout << "fron vehicle s: " << front_vehicle._s << endl;
+        target_s = _road.distance(front_vehicle, _ego) + target_speed*TIME_STEP*2;
+    }
+    target_s += _ego._s;
+
+    cout << "targe speed: " << target_speed  << endl;
+    cout << "target s: " << target_s << " ego s: " << _ego._s << " end path s: " << _end_path_s << endl;
+    cout << "end_s: " << end_s <<  endl;
+    double s_gap = target_s - end_s;
+    cout << "s_gap: " << s_gap << endl;
+
     double target_d = _road.laneCenter(target_lane);
-    vector<double> next_wp0 = getXY(_ego._s + target_s/3, target_d, _road._map_waypoints_s,
+    vector<double> next_wp0 = getXY(end_s + s_gap/3, target_d, _road._map_waypoints_s,
                                     _road._map_waypoints_x, _road._map_waypoints_y);
-    vector<double> next_wp1 = getXY(_ego._s + target_s*2/3, target_d, _road._map_waypoints_s,
+    vector<double> next_wp1 = getXY(end_s + s_gap*2/3, target_d, _road._map_waypoints_s,
                                     _road._map_waypoints_x, _road._map_waypoints_y);
-    vector<double> next_wp2 = getXY(_ego._s + target_s, target_d, _road._map_waypoints_s,
+    vector<double> next_wp2 = getXY(end_s + s_gap, target_d, _road._map_waypoints_s,
                                     _road._map_waypoints_x, _road._map_waypoints_y);
     
     ptsx.push_back(next_wp0[0]);
@@ -152,7 +165,7 @@ vector<vector<double>> Planner::generateTrajectory(int target_lane) {
     cout << "ptsy: " << endl;
     showVector(ptsy);
 
-    for (int i = 0; i < ptsx.size(); i++) {
+    for (size_t i = 0; i < ptsx.size(); i++) {
         // shift car reference angle to 0 degree
         double shift_x = ptsx[i] - ref_x;
         double shift_y = ptsy[i] - ref_y;
@@ -184,9 +197,9 @@ vector<vector<double>> Planner::generateTrajectory(int target_lane) {
     // Fill up the rest of our path planner after filling it with previous points, here we will always output 50 points
     for (int i = 0; i < NUM_PATH_POINTS - _previous_path_x.size(); ++i) {
         if (_ego._v < target_speed) {
-            _ego._v += ACCEL_LIMIT * TIME_STEP;
+            _ego._v += min(target_speed - _ego._v, ACCEL_LIMIT * TIME_STEP);
         } else if (_ego._v > target_speed) {
-            _ego._v -= ACCEL_LIMIT * TIME_STEP;
+            _ego._v -= min(_ego._v, ACCEL_LIMIT * TIME_STEP);
         }
 
         double N = target_dist / (TIME_STEP * _ego._v);  // each 0.02 seconds a new point is reached, transform miles per hour to m/s
@@ -207,7 +220,7 @@ vector<vector<double>> Planner::generateTrajectory(int target_lane) {
         trajectory[0].push_back(x_point);
         trajectory[1].push_back(y_point);
 
-        cout << x_point << "," << y_point;
+        cout << x_point << "," << y_point << endl;
     }
 
     return trajectory;

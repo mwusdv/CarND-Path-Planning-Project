@@ -76,7 +76,7 @@ int main() {
           cout << "update cars." << endl;
           planner.updateEgo(car_x, car_y, car_s, car_d, car_speed, car_yaw);
           planner.updateRoadVehicles(sensor_fusion);
-          planner.getPreviousPath(previous_path_y, previous_path_y);
+          planner.getPreviousPath(previous_path_x, previous_path_y, end_path_s, end_path_d);
 
           cout << "planning" << endl;
           int target_lane = planner.behaviorPlanning();

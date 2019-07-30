@@ -42,7 +42,7 @@ bool Road::ahead(const Vehicle& vehicle1, const Vehicle& vehicle2) {
     if (ds > 0) {
         return (ds < MAX_S/2);
     } else {
-        return (ds > -MAX_S/2);
+        return (ds < -MAX_S/2);
     }
 }
 
