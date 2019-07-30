@@ -8,6 +8,8 @@
 #include "helpers.h"
 #include "json.hpp"
 
+#include "planner.h"
+
 // for convenience
 using nlohmann::json;
 using std::string;
@@ -23,35 +25,16 @@ int main() {
   vector<double> map_waypoints_dx;
   vector<double> map_waypoints_dy;
 
-  // Waypoint map to read from
-  string map_file_ = "../data/highway_map.csv";
+  
   // The max s value before wrapping around the track back to 0
   double max_s = 6945.554;
 
-  std::ifstream in_map_(map_file_.c_str(), std::ifstream::in);
-
-  string line;
-  while (getline(in_map_, line)) {
-    std::istringstream iss(line);
-    double x;
-    double y;
-    float s;
-    float d_x;
-    float d_y;
-    iss >> x;
-    iss >> y;
-    iss >> s;
-    iss >> d_x;
-    iss >> d_y;
-    map_waypoints_x.push_back(x);
-    map_waypoints_y.push_back(y);
-    map_waypoints_s.push_back(s);
-    map_waypoints_dx.push_back(d_x);
-    map_waypoints_dy.push_back(d_y);
-  }
-
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy]
+  // Waypoint map to read from
+  string map_file = "../data/highway_map.csv";
+  Planner planner;
+  planner.load_map(map_file);
+  
+  h.onMessage([&planner]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -97,8 +80,14 @@ int main() {
            * TODO: define a path made up of (x,y) points that the car will visit
            *   sequentially every .02 seconds
            */
+          planner.updateEgo(car_x, car_y, car_s, car_d, car_speed, car_yaw);
+          planner.updateRoadVehicles(sensor_fusion);
+          vector<double> target = planner.behaviorPlanning();
+          int target_lane = (int)target[0];
+          double target_s = target[1];
+          vector<vector<double>> trajector = planner.generateTrajectory(target_lane, target_s);
 
-
+          // end
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
 
