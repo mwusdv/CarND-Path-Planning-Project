@@ -12,8 +12,7 @@
 
 // for convenience
 using nlohmann::json;
-using std::string;
-using std::vector;
+using namespace std;
 
 int main() {
   uWS::Hub h;
@@ -25,9 +24,6 @@ int main() {
   vector<double> map_waypoints_dx;
   vector<double> map_waypoints_dy;
 
-  
-  // The max s value before wrapping around the track back to 0
-  double max_s = 6945.554;
 
   // Waypoint map to read from
   string map_file = "../data/highway_map.csv";
@@ -73,23 +69,24 @@ int main() {
 
           json msgJson;
 
-          vector<double> next_x_vals;
-          vector<double> next_y_vals;
-
           /**
            * TODO: define a path made up of (x,y) points that the car will visit
            *   sequentially every .02 seconds
            */
+          cout << "update cars." << endl;
           planner.updateEgo(car_x, car_y, car_s, car_d, car_speed, car_yaw);
           planner.updateRoadVehicles(sensor_fusion);
-          vector<double> target = planner.behaviorPlanning();
-          int target_lane = (int)target[0];
-          double target_s = target[1];
-          vector<vector<double>> trajector = planner.generateTrajectory(target_lane, target_s);
+          planner.getPreviousPath(previous_path_y, previous_path_y);
+
+          cout << "planning" << endl;
+          int target_lane = planner.behaviorPlanning();
+          
+          cout << "generating trajectory" << endl;
+          vector<vector<double>> trajectory = planner.generateTrajectory(target_lane);
 
           // end
-          msgJson["next_x"] = next_x_vals;
-          msgJson["next_y"] = next_y_vals;
+          msgJson["next_x"] = trajectory[0];
+          msgJson["next_y"] = trajectory[1];
 
           auto msg = "42[\"control\","+ msgJson.dump()+"]";
 

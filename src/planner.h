@@ -30,11 +30,14 @@ public:
     vector<Vehicle> generatePredictions(double t);
 
     // planning the next movement
-    vector<double> behaviorPlanning();
+    int behaviorPlanning();
 
     // generate trajectory for the ego vehicle,
     // given the target position
-    vector<vector<double>> generateTrajectory(int lane, double s);
+    vector<vector<double>> generateTrajectory(int target_lane);
+
+    // find front vehicle of the ego vehicle on a given lane
+    bool getFrontVehicle(int lane, Vehicle& front_vehicle);
 
 public:
     Vehicle _ego;
@@ -46,6 +49,9 @@ public:
 
     const int NUM_PATH_POINTS = 50;
     const double TIME_STEP = 0.02;
+    const double SPEED_LIMIT = 50*1600.0/3600;  // m/s
+    const double ACCEL_LIMIT = 10;  // m/s^2
+    const double JERK_LIMIT = 10;   // m/s^3
 
 };
 #endif // PLANNER_H_

@@ -3,6 +3,7 @@
 #include <fstream>
 
 #include "road.h"
+#include "vehicle.h"
 
 Road::Road() {
     // empty
@@ -34,6 +35,23 @@ void Road::load_map(const string& file_name) {
         _map_waypoints_dx.push_back(d_x);
         _map_waypoints_dy.push_back(d_y);
     }
+}
+
+bool Road::ahead(const Vehicle& vehicle1, const Vehicle& vehicle2) {
+    double ds = vehicle1._s - vehicle2._s;
+    if (ds > 0) {
+        return (ds < MAX_S/2);
+    } else {
+        return (ds > -MAX_S/2);
+    }
+}
+
+double Road::distance(const Vehicle& front_vehicle, const Vehicle& vehicle) {
+    double ds = front_vehicle._s - vehicle._s;
+    if (ds < 0) {
+        ds += MAX_S;
+    }
+    return ds;
 }
 
 double Road::laneCenter(int lane) const {

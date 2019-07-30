@@ -47,4 +47,6 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
                      const vector<double> &maps_x, 
                      const vector<double> &maps_y);
                   
+void showVector(const vector<double> vec, size_t num=1000000);
+
 #endif  // HELPERS_H

@@ -10,10 +10,15 @@ class Road;
 class Vehicle {
 public:
     Vehicle();
+
+    // copy constructor
     Vehicle(const Vehicle& vehicle);
     Vehicle(const vector<double>& sensor_data, const Road& road);
     
     ~Vehicle();
+
+    // copy
+    const Vehicle& operator=(const Vehicle& vehicle);
 
     void setStatus(double x, double y, double s, 
                    double d, double v, double yaw,

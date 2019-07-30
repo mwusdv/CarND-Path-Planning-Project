@@ -13,14 +13,9 @@ Vehicle::Vehicle()
     // empty
 }
 
+// copy constructor
 Vehicle::Vehicle(const Vehicle& vehicle) {
-    _id = vehicle._id;
-    _x = vehicle._x;
-    _y = vehicle._y;
-    _s = vehicle._s;
-    _d = vehicle._d;
-    _v = vehicle._v;
-    _yaw = vehicle._yaw;
+    *this = vehicle;
 }
 
 Vehicle::Vehicle(const vector<double>& sensor_data, const Road& road) {
@@ -35,6 +30,21 @@ Vehicle::Vehicle(const vector<double>& sensor_data, const Road& road) {
     
 Vehicle::~Vehicle() {
     // empty
+}
+
+
+// copy
+const Vehicle& Vehicle::operator=(const Vehicle& vehicle) {
+    _id = vehicle._id;
+    _x = vehicle._x;
+    _y = vehicle._y;
+    _s = vehicle._s;
+    _d = vehicle._d;
+    _v = vehicle._v;
+    _yaw = vehicle._yaw;
+    _lane = vehicle._lane;
+
+    return *this;
 }
 
 void Vehicle::setStatus(double x, double y, double s, 

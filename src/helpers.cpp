@@ -1,4 +1,8 @@
+#include <iostream>
 #include "helpers.h"
+
+using namespace std;
+
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -143,4 +147,11 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
   double y = seg_y + d*sin(perp_heading);
 
   return {x,y};
+}
+
+void showVector(const vector<double> vec, size_t num) {
+  size_t N = min(vec.size(), num);
+  for (size_t i = 0; i < N; ++i) {
+    cout << i << ": " << vec[i] << endl;
+  }
 }

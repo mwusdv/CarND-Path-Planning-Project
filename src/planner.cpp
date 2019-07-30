@@ -1,5 +1,6 @@
 
 #include <math.h>
+#include <iostream>
 #include "spline.h"
 
 #include "planner.h"
@@ -24,14 +25,16 @@ void Planner::load_map(const string& file_name) {
 // get updated vehicle info
 void Planner::updateEgo(double x, double y, double s,
                         double d, double v, double yaw) {
-    _ego.setStatus(x, y, s, d, v, yaw, _road);
+    _ego.setStatus(x, y, s, d, v, deg2rad(yaw), _road);
 }
 
 void Planner::updateRoadVehicles(const vector<vector<double>>& senor_fusion) {
-
     _road_vehicles.clear();
     for (size_t i = 0; i < senor_fusion.size(); ++i) {
-        _road_vehicles.push_back(Vehicle(senor_fusion[i], _road));
+        Vehicle vehicle(senor_fusion[i], _road);
+        if (vehicle._lane >= 0) {
+            _road_vehicles.push_back(vehicle);
+        }
     }
 }
 
@@ -51,20 +54,49 @@ void Planner::getPreviousPath(const vector<double>& previous_path_x, const vecto
     _previous_path_y = previous_path_y;
 }
 
-// planning the next movement
-vector<double> Planner::behaviorPlanning() {
-    vector<double> target;
-    target[0] = _ego._lane;
-    target[1] = 30;
+bool Planner::getFrontVehicle(int lane, Vehicle& front_vehicle) {
+    double front_dist = _road.MAX_S*2;
+    bool found = false;
+    for (size_t i = 0; i < _road_vehicles.size(); ++i) {
+        const Vehicle& vehicle = _road_vehicles[i];
+        if (vehicle._lane == lane) {
+            if (_road.ahead(vehicle, _ego)) {
+                double dist = _road.distance(vehicle, _ego);
+                if (dist < front_dist) {
+                    front_dist = dist;
+                    front_vehicle = vehicle;
+                    found = true;
+                }
+            }
 
-    return target;
+        }
+    }
+
+    return found;
 }
+
+// planning the next movement
+int Planner::behaviorPlanning() {
+   
+    return _ego._lane;
+}
+
+    
 
 // generate trajectory for the ego vehicle,
 // given the target position
-vector<vector<double>> Planner::generateTrajectory(int target_lane, double target_s) {
-    vector<vector<double>> trajectory; // [0]: x, [1]: y
-
+vector<vector<double>> Planner::generateTrajectory(int target_lane) {
+    vector<vector<double>> trajectory(2); // [0]: x, [1]: y
+    Vehicle front_vehicle;
+    bool found = getFrontVehicle(target_lane, front_vehicle);
+    double target_speed = SPEED_LIMIT, target_s = 30;
+    if (found) {
+        target_speed = front_vehicle._v;
+        target_s = _road.distance(front_vehicle, _ego);
+    }
+    cout << "targe speed: " << target_speed  << endl;
+    cout << "target s: " << target_s << " ego s: " << _ego._s << endl;
+    
     int prev_size = _previous_path_x.size();
 
     vector<double> ptsx;
@@ -84,11 +116,11 @@ vector<vector<double>> Planner::generateTrajectory(int target_lane, double targe
         ptsy.push_back(prev_car_y);
         ptsy.push_back(_ego._y);
     } else {
-        ref_x = _previous_path_x[prev_size - 1];
-        ref_y = _previous_path_y[prev_size - 1];
+        ref_x = _previous_path_x[1];
+        ref_y = _previous_path_y[1];
 
-        double ref_x_prev = _previous_path_x[prev_size - 2];
-        double ref_y_prev = _previous_path_y[prev_size - 2];
+        double ref_x_prev = _previous_path_x[0];
+        double ref_y_prev = _previous_path_y[0];
         
         ref_yaw = atan2(ref_y - ref_y_prev, ref_x - ref_x_prev);
         ptsx.push_back(ref_x_prev);
@@ -99,20 +131,26 @@ vector<vector<double>> Planner::generateTrajectory(int target_lane, double targe
     }
 
     double target_d = _road.laneCenter(target_lane);
-    vector<double> next_wp0 = getXY(_ego._s + 30, target_d, _road._map_waypoints_s,
+    vector<double> next_wp0 = getXY(_ego._s + target_s/3, target_d, _road._map_waypoints_s,
                                     _road._map_waypoints_x, _road._map_waypoints_y);
-    vector<double> next_wp1 = getXY(_ego._s + 60, target_d, _road._map_waypoints_s,
+    vector<double> next_wp1 = getXY(_ego._s + target_s*2/3, target_d, _road._map_waypoints_s,
                                     _road._map_waypoints_x, _road._map_waypoints_y);
-    vector<double> next_wp2 = getXY(_ego._s + 90, target_d, _road._map_waypoints_s,
+    vector<double> next_wp2 = getXY(_ego._s + target_s, target_d, _road._map_waypoints_s,
                                     _road._map_waypoints_x, _road._map_waypoints_y);
     
     ptsx.push_back(next_wp0[0]);
     ptsx.push_back(next_wp1[0]);
     ptsx.push_back(next_wp2[0]);
-
+    
     ptsy.push_back(next_wp0[1]);
     ptsy.push_back(next_wp1[1]);
     ptsy.push_back(next_wp2[1]);
+
+    cout << "ptsx: " << endl;
+    showVector(ptsx);
+
+    cout << "ptsy: " << endl;
+    showVector(ptsy);
 
     for (int i = 0; i < ptsx.size(); i++) {
         // shift car reference angle to 0 degree
@@ -130,21 +168,26 @@ vector<vector<double>> Planner::generateTrajectory(int target_lane, double targe
     s.set_points(ptsx, ptsy);
 
     // start with the previous path points from last time
+    cout << "copy previous points" << endl;
     for (int i = 0; i < _previous_path_x.size(); i++) {
         trajectory[0].push_back(_previous_path_x[i]);
         trajectory[1].push_back(_previous_path_y[i]);
     }
 
     // calculate how to break up spline points so that we travel at our desired reference velocity
-    double target_x = 30.0;
+    double target_x = target_s;
     double target_y = s(target_x);
     double target_dist = sqrt((target_x) * (target_x) + (target_y) * (target_y));
 
     double x_add_on = 0;
 
     // Fill up the rest of our path planner after filling it with previous points, here we will always output 50 points
-
     for (int i = 0; i < NUM_PATH_POINTS - _previous_path_x.size(); ++i) {
+        if (_ego._v < target_speed) {
+            _ego._v += ACCEL_LIMIT * TIME_STEP;
+        } else if (_ego._v > target_speed) {
+            _ego._v -= ACCEL_LIMIT * TIME_STEP;
+        }
 
         double N = target_dist / (TIME_STEP * _ego._v);  // each 0.02 seconds a new point is reached, transform miles per hour to m/s
         double x_point = x_add_on + (target_x) / N;
@@ -163,6 +206,8 @@ vector<vector<double>> Planner::generateTrajectory(int target_lane, double targe
 
         trajectory[0].push_back(x_point);
         trajectory[1].push_back(y_point);
+
+        cout << x_point << "," << y_point;
     }
 
     return trajectory;
