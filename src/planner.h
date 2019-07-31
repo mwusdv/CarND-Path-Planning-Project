@@ -44,9 +44,6 @@ public:
     // minimum distance beyond which ego car can drive full speed
     double fullSpeedDist(double front_speed);
 
-    // currently how long the ego car can run within one second
-    double egoOneSecDist();
-
 public:
     Vehicle _ego;
     vector<Vehicle> _road_vehicles;
@@ -58,11 +55,12 @@ public:
     double _end_path_d;
 
     const int NUM_TRAJECTORY_POINTS = 20;
+    const double PLANNING_DIST = 30; // at most planning the next 30 meters
     const double TIME_STEP = 0.02;
     const double SPEED_LIMIT = 49.5*1600.0/3600;  // m/s
-    const double ACCEL_LIMIT = 9;  // m/s^2
-    const double JERK_LIMIT = 9;   // m/s^3
-    const double DIST_BUFFER = 15;
+    const double ACCEL_LIMIT = 9.5;  // m/s^2
+    const double JERK_LIMIT = 9.5;   // m/s^3
+    const double DIST_BUFFER = 25;
 
 };
 #endif // PLANNER_H_

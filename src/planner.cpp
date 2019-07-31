@@ -97,17 +97,11 @@ double Planner::fullSpeedDist(double front_speed) {
     }
 }
 
-// currently how long the ego car can run within one second
-double Planner::egoOneSecDist() {
-    return _ego._v + 0.5 * ACCEL_LIMIT;
-}
-
 // generate trajectory for the ego vehicle,
 // given the target position
 vector<vector<double>> Planner::generateTrajectory(int target_lane) {
     vector<vector<double>> trajectory(2); // [0]: x, [1]: y
     // start with the previous path points from last time
-    cout << "copy previous points" << endl;
     for (int i = 0; i < _previous_path_x.size(); i++) {
         trajectory[0].push_back(_previous_path_x[i]);
         trajectory[1].push_back(_previous_path_y[i]);
@@ -117,7 +111,13 @@ vector<vector<double>> Planner::generateTrajectory(int target_lane) {
     
     // starting point of the new trajectory to be calculated
     int prev_size = _previous_path_x.size();
-    double start_s = (prev_size > 0)? _end_path_s : _ego._s;
+    double start_s = _ego._s;
+    if (prev_size > 0) {
+        start_s = _end_path_s;
+        if (start_s < _ego._s) {
+            start_s += _road.MAX_S;
+        }
+    }
 
     double start_x = _ego._x;
     double start_y = _ego._y;
@@ -152,9 +152,9 @@ vector<vector<double>> Planner::generateTrajectory(int target_lane) {
 
     // determine the target of the new trajectory, 
     // depending on the front vehicle info
-    double ego_1sec_dist = egoOneSecDist();
-    double target_speed = SPEED_LIMIT, target_s = _ego._s + ego_1sec_dist; // just plane for one second
+    double target_speed = SPEED_LIMIT, target_s = _ego._s + PLANNING_DIST; 
     double last_dist = start_s - _ego._s; // the speed was already calulated in the last round up to last_dist
+    
     Vehicle front_vehicle;
     bool found = getFrontVehicle(target_lane, front_vehicle);
     if (found) {
@@ -168,28 +168,31 @@ vector<vector<double>> Planner::generateTrajectory(int target_lane) {
         } else if (front_dist < DIST_BUFFER) {
             target_speed = min(5.0, front_vehicle._v);
         }
-        target_s = min(front_vehicle._s + front_vehicle._v*TIME_STEP*prev_size, _ego._s + 30);
+
+        // warp up
+        double front_s = (front_vehicle._s < _ego._s)? front_vehicle._s + _road.MAX_S : front_vehicle._s;
+        target_s = min(front_s + front_vehicle._v*TIME_STEP*prev_size, target_s);
     }
 
     cout << "targe speed: " << target_speed  << " ego v: " << _ego._v << endl;
     cout << "target s: " << target_s << " ego s: " << _ego._s << " end path s: " << _end_path_s << endl;
     double s_gap = target_s - start_s;
-  
+
     double target_d = _road.laneCenter(target_lane);
-    vector<double> next_wp0 = getXY(start_s + s_gap/3, target_d, _road._map_waypoints_s,
+    vector<double> next_wp0 = getXY(start_s + s_gap/2, target_d, _road._map_waypoints_s,
                                     _road._map_waypoints_x, _road._map_waypoints_y);
-    vector<double> next_wp1 = getXY(start_s + s_gap*2/3, target_d, _road._map_waypoints_s,
+    vector<double> next_wp1 = getXY(start_s + s_gap, target_d, _road._map_waypoints_s,
                                     _road._map_waypoints_x, _road._map_waypoints_y);
-    vector<double> next_wp2 = getXY(start_s + s_gap, target_d, _road._map_waypoints_s,
-                                    _road._map_waypoints_x, _road._map_waypoints_y);
+    //vector<double> next_wp2 = getXY(start_s + s_gap, target_d, _road._map_waypoints_s,
+    //                                _road._map_waypoints_x, _road._map_waypoints_y);
     
     ptsx.push_back(next_wp0[0]);
     ptsx.push_back(next_wp1[0]);
-    ptsx.push_back(next_wp2[0]);
+    //ptsx.push_back(next_wp2[0]);
     
     ptsy.push_back(next_wp0[1]);
     ptsy.push_back(next_wp1[1]);
-    ptsy.push_back(next_wp2[1]);
+    //ptsy.push_back(next_wp2[1]);
 
     for (size_t i = 0; i < ptsx.size(); i++) {
         // shift car reference angle to 0 degree
