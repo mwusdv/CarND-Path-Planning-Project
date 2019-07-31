@@ -155,3 +155,7 @@ void showVector(const vector<double> vec, size_t num) {
     cout << i << ": " << vec[i] << endl;
   }
 }
+
+double mph2mps(double speed) {
+  return speed*1600/3600;
+}

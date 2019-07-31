@@ -84,23 +84,48 @@ int Planner::behaviorPlanning() {
     return _ego._lane;
 }
 
-    
+// given front vehicle speed, what is the 
+// minimum distance beyond which ego car can drive full speed
+double Planner::fullSpeedDist(double front_speed) {
+    if (front_speed >= SPEED_LIMIT) {
+        return 1000000.0;
+    } else {
+        double slow_down_time = (SPEED_LIMIT - front_speed)/ACCEL_LIMIT;
+        return SPEED_LIMIT*slow_down_time - 0.5*ACCEL_LIMIT*slow_down_time*slow_down_time
+                + DIST_BUFFER;
+
+    }
+}
+
+// currently how long the ego car can run within one second
+double Planner::egoOneSecDist() {
+    return _ego._v + 0.5 * ACCEL_LIMIT;
+}
 
 // generate trajectory for the ego vehicle,
 // given the target position
 vector<vector<double>> Planner::generateTrajectory(int target_lane) {
     vector<vector<double>> trajectory(2); // [0]: x, [1]: y
-   
-    int prev_size = _previous_path_x.size();
-    double end_s = (prev_size > 0)? _end_path_s : _ego._s;
+    // start with the previous path points from last time
+    cout << "copy previous points" << endl;
+    for (int i = 0; i < _previous_path_x.size(); i++) {
+        trajectory[0].push_back(_previous_path_x[i]);
+        trajectory[1].push_back(_previous_path_y[i]);
 
+        //cout << "Prev " << _previous_path_x[i] << ", " << _previous_path_y[i] << endl;
+    }
+    
+    // starting point of the new trajectory to be calculated
+    int prev_size = _previous_path_x.size();
+    double start_s = (prev_size > 0)? _end_path_s : _ego._s;
+
+    double start_x = _ego._x;
+    double start_y = _ego._y;
+    double start_yaw = _ego._yaw;
+
+    // build spline points
     vector<double> ptsx;
     vector<double> ptsy;
-
-    double ref_x = _ego._x;
-    double ref_y = _ego._y;
-    double ref_yaw = _ego._yaw;
-
     if (prev_size < 2) {
         double prev_car_x = _ego._x - cos(_ego._yaw);
         double prev_car_y = _ego._y - sin(_ego._yaw);
@@ -111,44 +136,51 @@ vector<vector<double>> Planner::generateTrajectory(int target_lane) {
         ptsy.push_back(prev_car_y);
         ptsy.push_back(_ego._y);
     } else {
-        ref_x = _previous_path_x[prev_size-1];
-        ref_y = _previous_path_y[prev_size-1];
+        start_x = _previous_path_x[prev_size-1];
+        start_y = _previous_path_y[prev_size-1];
 
-        double ref_x_prev = _previous_path_x[prev_size-2];
-        double ref_y_prev = _previous_path_y[prev_size-2];
+        double prev_x = _previous_path_x[prev_size-2];
+        double prev_y = _previous_path_y[prev_size-2];
         
-        ref_yaw = atan2(ref_y - ref_y_prev, ref_x - ref_x_prev);
-        ptsx.push_back(ref_x_prev);
-        ptsx.push_back(ref_x);
+        start_yaw = atan2(start_y - prev_y, start_x - prev_x);
+        ptsx.push_back(prev_x);
+        ptsx.push_back(start_x);
 
-        ptsy.push_back(ref_y_prev);
-        ptsy.push_back(ref_y);
-
-        cout << "ref_x: " << ref_x << " ref_x_prev: " << ref_x_prev << endl;
+        ptsy.push_back(prev_y);
+        ptsy.push_back(start_y);
     }
 
+    // determine the target of the new trajectory, 
+    // depending on the front vehicle info
+    double ego_1sec_dist = egoOneSecDist();
+    double target_speed = SPEED_LIMIT, target_s = _ego._s + ego_1sec_dist; // just plane for one second
+    double last_dist = start_s - _ego._s; // the speed was already calulated in the last round up to last_dist
     Vehicle front_vehicle;
     bool found = getFrontVehicle(target_lane, front_vehicle);
-    double target_speed = SPEED_LIMIT, target_s = 30;
     if (found) {
-        target_speed = front_vehicle._v;
-        cout << "fron vehicle s: " << front_vehicle._s << endl;
-        target_s = _road.distance(front_vehicle, _ego) + target_speed*TIME_STEP*2;
+        double front_dist = _road.distance(front_vehicle, _ego);
+        double full_speed_dist = fullSpeedDist(front_vehicle._v) + last_dist;
+        cout << "front dist: " << front_dist << " full speed dist: " << full_speed_dist;
+        cout << " front speed: " << front_vehicle._v  << endl;
+
+        if (front_dist < full_speed_dist && front_dist > DIST_BUFFER ) {
+            target_speed = front_vehicle._v;
+        } else if (front_dist < DIST_BUFFER) {
+            target_speed = min(5.0, front_vehicle._v);
+        }
+        target_s = min(front_vehicle._s + front_vehicle._v*TIME_STEP*prev_size, _ego._s + 30);
     }
-    target_s += _ego._s;
 
-    cout << "targe speed: " << target_speed  << endl;
+    cout << "targe speed: " << target_speed  << " ego v: " << _ego._v << endl;
     cout << "target s: " << target_s << " ego s: " << _ego._s << " end path s: " << _end_path_s << endl;
-    cout << "end_s: " << end_s <<  endl;
-    double s_gap = target_s - end_s;
-    cout << "s_gap: " << s_gap << endl;
-
+    double s_gap = target_s - start_s;
+  
     double target_d = _road.laneCenter(target_lane);
-    vector<double> next_wp0 = getXY(end_s + s_gap/3, target_d, _road._map_waypoints_s,
+    vector<double> next_wp0 = getXY(start_s + s_gap/3, target_d, _road._map_waypoints_s,
                                     _road._map_waypoints_x, _road._map_waypoints_y);
-    vector<double> next_wp1 = getXY(end_s + s_gap*2/3, target_d, _road._map_waypoints_s,
+    vector<double> next_wp1 = getXY(start_s + s_gap*2/3, target_d, _road._map_waypoints_s,
                                     _road._map_waypoints_x, _road._map_waypoints_y);
-    vector<double> next_wp2 = getXY(end_s + s_gap, target_d, _road._map_waypoints_s,
+    vector<double> next_wp2 = getXY(start_s + s_gap, target_d, _road._map_waypoints_s,
                                     _road._map_waypoints_x, _road._map_waypoints_y);
     
     ptsx.push_back(next_wp0[0]);
@@ -159,69 +191,54 @@ vector<vector<double>> Planner::generateTrajectory(int target_lane) {
     ptsy.push_back(next_wp1[1]);
     ptsy.push_back(next_wp2[1]);
 
-    cout << "ptsx: " << endl;
-    showVector(ptsx);
-
-    cout << "ptsy: " << endl;
-    showVector(ptsy);
-
     for (size_t i = 0; i < ptsx.size(); i++) {
         // shift car reference angle to 0 degree
-        double shift_x = ptsx[i] - ref_x;
-        double shift_y = ptsy[i] - ref_y;
+        double shift_x = ptsx[i] - start_x;
+        double shift_y = ptsy[i] - start_y;
 
-        ptsx[i] = (shift_x * cos(0 - ref_yaw) - shift_y * sin(0 - ref_yaw));
-        ptsy[i] = (shift_x * sin(0 - ref_yaw) + shift_y * cos(0 - ref_yaw));
+        ptsx[i] = (shift_x * cos(-start_yaw) - shift_y * sin(-start_yaw));
+        ptsy[i] = (shift_x * sin(-start_yaw) + shift_y * cos(-start_yaw));
     }
 
     // create a spline
     tk::spline s;
-
-    // set (x,y) points to the spline
     s.set_points(ptsx, ptsy);
 
-    // start with the previous path points from last time
-    cout << "copy previous points" << endl;
-    for (int i = 0; i < _previous_path_x.size(); i++) {
-        trajectory[0].push_back(_previous_path_x[i]);
-        trajectory[1].push_back(_previous_path_y[i]);
-    }
-
     // calculate how to break up spline points so that we travel at our desired reference velocity
-    double target_x = target_s;
+    double target_x = target_s - start_s;
     double target_y = s(target_x);
-    double target_dist = sqrt((target_x) * (target_x) + (target_y) * (target_y));
+    double target_dist = sqrt(target_x*target_x + target_y*target_y);
 
-    double x_add_on = 0;
-
+    double x = 0;
+    double next_v = _ego._v;
     // Fill up the rest of our path planner after filling it with previous points, here we will always output 50 points
-    for (int i = 0; i < NUM_PATH_POINTS - _previous_path_x.size(); ++i) {
-        if (_ego._v < target_speed) {
-            _ego._v += min(target_speed - _ego._v, ACCEL_LIMIT * TIME_STEP);
-        } else if (_ego._v > target_speed) {
-            _ego._v -= min(_ego._v, ACCEL_LIMIT * TIME_STEP);
+    cout << "prev_size: " << prev_size << endl;
+    for (int i = 0; i < NUM_TRAJECTORY_POINTS - prev_size; ++i) {
+        if (next_v < target_speed) {
+            next_v += min(target_speed - next_v, ACCEL_LIMIT * TIME_STEP);
+        } else if (next_v > target_speed) {
+            next_v -= min(next_v - target_speed, ACCEL_LIMIT * TIME_STEP);
         }
 
-        double N = target_dist / (TIME_STEP * _ego._v);  // each 0.02 seconds a new point is reached, transform miles per hour to m/s
-        double x_point = x_add_on + (target_x) / N;
-        double y_point = s(x_point);
-        x_add_on = x_point;
-
-        double x_ref = x_point;
-        double y_ref = y_point;
+        double N = target_dist / (TIME_STEP * next_v);  // each TIME_STEP a new point is reached
+        x += target_x/N;
+        double y = s(x);
 
         // rotating back to normal after rotating it earlier
-        x_point = (x_ref * cos(ref_yaw) - y_ref * sin(ref_yaw));
-        y_point = (x_ref * sin(ref_yaw) + y_ref * cos(ref_yaw));
-
-        x_point += ref_x;
-        y_point += ref_y;
+        double x_point = (x * cos(start_yaw) - y * sin(start_yaw));
+        double y_point = (x * sin(start_yaw) + y * cos(start_yaw));
+        x_point += start_x;
+        y_point += start_y;
 
         trajectory[0].push_back(x_point);
         trajectory[1].push_back(y_point);
 
-        cout << x_point << "," << y_point << endl;
+        //cout << "new " << x_point << ", " << y_point << endl;
     }
+    //cout << "trajectory x: " << endl;
+    //showVector(trajectory[0]);
 
+    //cout << endl << "trajectory y: " << endl;
+    //showVector(trajectory[1]);
     return trajectory;
 }

@@ -49,4 +49,6 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
                   
 void showVector(const vector<double> vec, size_t num=1000000);
 
+double mph2mps(double speed);
+
 #endif  // HELPERS_H

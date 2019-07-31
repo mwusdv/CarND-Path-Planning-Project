@@ -24,7 +24,8 @@ public:
     void updateRoadVehicles(const vector<vector<double>>& senor_fusion);
 
     // preious path
-    void getPreviousPath(const vector<double>& previous_path_x, const vector<double>& previous_path_y);
+    void getPreviousPath(const vector<double>& previous_path_x, const vector<double>& previous_path_y, 
+                         double end_path_s, double end_path_d);
 
     // predict positions of road vehicles in t seconds
     vector<Vehicle> generatePredictions(double t);
@@ -39,6 +40,13 @@ public:
     // find front vehicle of the ego vehicle on a given lane
     bool getFrontVehicle(int lane, Vehicle& front_vehicle);
 
+    // given front vehicle speed, what is the 
+    // minimum distance beyond which ego car can drive full speed
+    double fullSpeedDist(double front_speed);
+
+    // currently how long the ego car can run within one second
+    double egoOneSecDist();
+
 public:
     Vehicle _ego;
     vector<Vehicle> _road_vehicles;
@@ -46,12 +54,15 @@ public:
 
     vector<double> _previous_path_x;
     vector<double> _previous_path_y;
+    double _end_path_s;
+    double _end_path_d;
 
-    const int NUM_PATH_POINTS = 50;
+    const int NUM_TRAJECTORY_POINTS = 20;
     const double TIME_STEP = 0.02;
-    const double SPEED_LIMIT = 50*1600.0/3600;  // m/s
-    const double ACCEL_LIMIT = 10;  // m/s^2
-    const double JERK_LIMIT = 10;   // m/s^3
+    const double SPEED_LIMIT = 49.5*1600.0/3600;  // m/s
+    const double ACCEL_LIMIT = 9;  // m/s^2
+    const double JERK_LIMIT = 9;   // m/s^3
+    const double DIST_BUFFER = 15;
 
 };
 #endif // PLANNER_H_
