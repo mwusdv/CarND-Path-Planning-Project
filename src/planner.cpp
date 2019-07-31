@@ -180,8 +180,8 @@ double Planner::evaluateLane(const LaneInfo& lane_info, double& target_s, double
     double front_s = (lane_info._front_s < _ego._s)? lane_info._front_s + _road.MAX_S : lane_info._front_s;
     target_s = min(front_s + lane_info._front_speed*TIME_STEP*prev_size, target_s);
 
-    // score: we prefer higher speed, same lane, further target s
-    return target_speed - 1*abs(lane_info._lane - _ego._lane) + target_s * 0.001;
+    // score: we prefer higher speed, same lane
+    return target_speed - 2*abs(lane_info._lane - _ego._lane);
 }
 
 // choose next lane
@@ -312,21 +312,37 @@ vector<vector<double>> Planner::generateTrajectory() {
     double target_x = target_s - start_s;
     double target_y = s(target_x);
     double target_dist = sqrt(target_x*target_x + target_y*target_y);
+    double d_ratio = target_x/target_dist;
 
-    double x = 0;
-    double next_v = _ego._v;
+    double x0 = 0, y0 = 0, v0 = _ego._v;
+    double x = 0, y = 0;
+    double v = _ego._v;
     // Fill up the rest of our path planner after filling it with previous points, here we will always output 50 points
     cout << "prev_size: " << prev_size << endl;
     for (int i = 0; i < NUM_TRAJECTORY_POINTS - prev_size; ++i) {
-        if (next_v < target_speed) {
-            next_v += min(target_speed - next_v, ACCEL_LIMIT * TIME_STEP);
-        } else if (next_v > target_speed) {
-            next_v -= min(next_v - target_speed, ACCEL_LIMIT * TIME_STEP);
+        if (v < target_speed) {
+            v += min(target_speed - v, ACCEL_LIMIT * TIME_STEP);
+        } else if (v > target_speed) {
+            v -= min(v - target_speed, ACCEL_LIMIT * TIME_STEP);
         }
 
-        double N = target_dist / (TIME_STEP * next_v);  // each TIME_STEP a new point is reached
-        x += target_x/N;
-        double y = s(x);
+        // determine the next point on the spline
+        double accel = 100000;
+        double step_ratio = 1.0;
+        while (accel > ACCEL_LIMIT) {
+            double step = TIME_STEP * v * step_ratio;
+            x = x0 + step*d_ratio;
+            y = s(x);
+            double dx = x-x0, dy = y-y0;
+            double v = sqrt(dx*dx + dy*dy) / TIME_STEP;
+            accel = (v-v0)/TIME_STEP;
+            //cout << "v: " << v << " a: " << accel << endl;
+            step_ratio *= 0.9;
+        }
+        x0 = x;
+        y0 = y;
+        v0 = v;
+        //cout << "x: " << x <<  " y: " << y << endl;
 
         // rotating back to normal after rotating it earlier
         double x_point = (x * cos(start_yaw) - y * sin(start_yaw));
@@ -344,5 +360,39 @@ vector<vector<double>> Planner::generateTrajectory() {
 
     //cout << endl << "trajectory y: " << endl;
     //showVector(trajectory[1]);
+    //validTrajectory(trajectory[0], trajectory[1]);
     return trajectory;
+}
+
+// validate a trajectory
+void Planner::validTrajectory(const vector<double>& x_points, const vector<double>& y_points) {
+    double x0 = x_points[0];
+    double y0 = y_points[0];
+    double v0 = _ego._v;
+
+    cout << "0 " << x0 << ", " << y0 << ", " << v0 << endl;
+
+    int N = x_points.size();
+    for (size_t i = 1; i < N; ++i) {
+        double x1 = x_points[i];
+        double y1 = y_points[i];
+        
+
+        double dx = x1-x0;
+        double dy = y1-y0;
+        double dist = sqrt(dx*dx + dy*dy);
+
+        double v1 = dist/TIME_STEP;
+        double a = (v1-v0)/TIME_STEP;
+        cout << i << " " << x1 << ", " << y1 << ", " << v1 << ", " << a << endl;
+
+        if (v1 > SPEED_LIMIT || a > ACCEL_LIMIT) {
+            cout << "Not passed." << endl;
+            exit(1);
+        }
+
+        x0 = x1;
+        y0 = y1;
+        v0 = v1;
+    }
 }
