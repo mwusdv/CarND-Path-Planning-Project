@@ -18,6 +18,10 @@ public:
 
     // is v1 in front of v2?
     bool ahead(const Vehicle& vehicle1, const Vehicle& vehicle2);
+
+    // is v1 behind of v2?
+    bool behind(const Vehicle& vehicle1, const Vehicle& vehicle2);
+
     double distance(const Vehicle& front_vehicle, const Vehicle& vehicle);
 
     double laneCenter(int lane) const;

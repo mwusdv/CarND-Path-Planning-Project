@@ -80,11 +80,7 @@ int main() {
           planner.updateRoadVehicles(sensor_fusion);
           planner.getPreviousPath(previous_path_x, previous_path_y, end_path_s, end_path_d);
 
-          //cout << "planning" << endl;
-          int target_lane = planner.behaviorPlanning();
-          
-          //cout << "generating trajectory" << endl;
-          vector<vector<double>> trajectory = planner.generateTrajectory(target_lane);
+          vector<vector<double>> trajectory = planner.generateTrajectory();
 
           // end
           msgJson["next_x"] = trajectory[0];

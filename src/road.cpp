@@ -37,6 +37,7 @@ void Road::load_map(const string& file_name) {
     }
 }
 
+// is v1 in front of v2?
 bool Road::ahead(const Vehicle& vehicle1, const Vehicle& vehicle2) {
     double ds = vehicle1._s - vehicle2._s;
     if (ds > 0) {
@@ -44,6 +45,11 @@ bool Road::ahead(const Vehicle& vehicle1, const Vehicle& vehicle2) {
     } else {
         return (ds < -MAX_S/2);
     }
+}
+
+// is v1 in behind of v2?
+bool Road::behind(const Vehicle& vehicle1, const Vehicle& vehicle2) {
+    return !ahead(vehicle1, vehicle2);
 }
 
 double Road::distance(const Vehicle& front_vehicle, const Vehicle& vehicle) {

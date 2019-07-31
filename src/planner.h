@@ -9,6 +9,17 @@
 using std::vector;
 using std::string;
 
+struct LaneInfo {
+    int _lane;
+    
+    double _front_s;
+    double _front_dist;
+    double _front_speed;
+
+    double _rear_dist;
+    double _rear_speed;
+};
+
 class Planner {
 public:
     Planner();
@@ -33,12 +44,25 @@ public:
     // planning the next movement
     int behaviorPlanning();
 
+    // check a given lane
+    LaneInfo checkLane(int lane);
+
+    // evaluate running on a lane
+    double evaluateLane(const LaneInfo& lane_info, double& target_s, double& target_speed);
+
+    // choose next lane
+    void chooseLane(int& target_lane, double& target_s, double& target_speed,
+                    LaneInfo& target_lane_info);
+
     // generate trajectory for the ego vehicle,
     // given the target position
-    vector<vector<double>> generateTrajectory(int target_lane);
+    vector<vector<double>> generateTrajectory();
 
     // find front vehicle of the ego vehicle on a given lane
     bool getFrontVehicle(int lane, Vehicle& front_vehicle);
+
+    // find rear vehicle of the ego vehicle on a given lane
+    bool getRearVehicle(int lane, Vehicle& rear_vehicle);
 
     // given front vehicle speed, what is the 
     // minimum distance beyond which ego car can drive full speed

@@ -78,6 +78,26 @@ bool Planner::getFrontVehicle(int lane, Vehicle& front_vehicle) {
     return found;
 }
 
+bool Planner::getRearVehicle(int lane, Vehicle& rear_vehicle) {
+    double rear_dist = _road.MAX_S*2;
+    bool found = false;
+    for (size_t i = 0; i < _road_vehicles.size(); ++i) {
+        const Vehicle& vehicle = _road_vehicles[i];
+        if (vehicle._lane == lane) {
+            if (_road.behind(vehicle, _ego)) {
+                double dist = _road.distance(_ego, vehicle);
+                if (dist < rear_dist) {
+                    rear_dist = dist;
+                    rear_vehicle = vehicle;
+                    found = true;
+                }
+            }
+        }
+    }
+
+    return found;
+}
+
 // planning the next movement
 int Planner::behaviorPlanning() {
    
@@ -93,15 +113,117 @@ double Planner::fullSpeedDist(double front_speed) {
         double slow_down_time = (SPEED_LIMIT - front_speed)/ACCEL_LIMIT;
         return SPEED_LIMIT*slow_down_time - 0.5*ACCEL_LIMIT*slow_down_time*slow_down_time
                 + DIST_BUFFER;
+    }
+}
 
+// investigate how about running on the given lane
+LaneInfo Planner::checkLane(int lane) {  
+    LaneInfo lane_info;
+    lane_info._lane = lane;
+
+    // front vehicle info
+    Vehicle front_vehicle;
+    lane_info._front_dist = _road.MAX_S*2;
+    lane_info._front_speed = SPEED_LIMIT;
+    bool found = getFrontVehicle(lane, front_vehicle);
+    if (found) {
+        lane_info._front_s = front_vehicle._s;
+        lane_info._front_dist = _road.distance(front_vehicle, _ego);
+        lane_info._front_speed = front_vehicle._v;
+    }
+
+    // rear vehicle info
+    Vehicle rear_vehicle;
+    lane_info._rear_dist = _road.MAX_S*2;
+    lane_info._rear_speed = SPEED_LIMIT;
+    found = getRearVehicle(lane, rear_vehicle);
+    if (found) {
+        lane_info._rear_dist = _road.distance(_ego, rear_vehicle);
+        lane_info._rear_speed = rear_vehicle._v;
+    }
+
+    return lane_info;
+}
+
+// evaluate running on a lane
+double Planner::evaluateLane(const LaneInfo& lane_info, double& target_s, double& target_speed) {
+    // if possibly collide with rear vehicle, then score is 0
+    if (lane_info._lane != _ego._lane && lane_info._rear_dist < DIST_BUFFER) {
+        return 0;
+    }
+
+    // starting point of the new trajectory to be calculated
+    int prev_size = _previous_path_x.size();
+    double start_s = _ego._s;
+    if (prev_size > 0) {
+        start_s = _end_path_s;
+        if (start_s < _ego._s) {
+            start_s += _road.MAX_S;
+        }
+    }
+
+    // compute target s and target speed on the given lane
+    // based on the front vehicle info
+    double last_dist = start_s - _ego._s; // the speed was already calulated in the last round up to last_dist
+    double full_speed_dist = fullSpeedDist(lane_info._front_speed) + last_dist;
+    
+    // targe speed
+    target_speed = SPEED_LIMIT;
+    if (lane_info._front_dist < full_speed_dist && lane_info._front_dist > DIST_BUFFER ) {
+        target_speed = lane_info._front_speed;
+    } else if (lane_info._front_dist < DIST_BUFFER) {
+        target_speed = min(5.0, lane_info._front_speed);
+    }
+
+    // target s
+    target_s = _ego._s + PLANNING_DIST;    // warp up
+    double front_s = (lane_info._front_s < _ego._s)? lane_info._front_s + _road.MAX_S : lane_info._front_s;
+    target_s = min(front_s + lane_info._front_speed*TIME_STEP*prev_size, target_s);
+
+    // score: we prefer higher speed, same lane, further target s
+    return target_speed - 1*abs(lane_info._lane - _ego._lane) + target_s * 0.001;
+}
+
+// choose next lane
+void Planner::chooseLane(int& target_lane, double& target_s, double& target_speed,
+                         LaneInfo& target_lane_info) {
+    // check left, current and right lane, and keep the best one
+    double best_score = -1, best_target_s, best_target_speed;
+    for (int i = -1; i < 2; ++i) {
+        int cur_lane = _ego._lane + i;
+        if (cur_lane < 0 || cur_lane >= _road.NUM_LANES) {
+            continue;
+        }
+
+        LaneInfo cur_info = checkLane(cur_lane);
+        double cur_target_s, cur_target_speed;
+        double score = evaluateLane(cur_info, cur_target_s, cur_target_speed);
+
+        cout << "checking lane: " << cur_lane << endl;
+        cout << "front dist: " << cur_info._front_dist << " front speed: " << cur_info._front_speed << endl;
+        cout << "rear dist: " << cur_info._rear_dist << " rear speed: " << cur_info._rear_speed << endl;
+        
+        if (score > best_score) {
+            best_score = score;
+            target_lane = cur_lane;
+            target_s = cur_target_s;
+            target_speed = cur_target_speed;
+            target_lane_info = cur_info;
+        }
     }
 }
 
 // generate trajectory for the ego vehicle,
 // given the target position
-vector<vector<double>> Planner::generateTrajectory(int target_lane) {
-    vector<vector<double>> trajectory(2); // [0]: x, [1]: y
+vector<vector<double>> Planner::generateTrajectory() {
+    // choose one lane
+    int target_lane;
+    LaneInfo target_lane_info;
+    double target_s, target_speed;
+    chooseLane(target_lane, target_s, target_speed, target_lane_info);
+
     // start with the previous path points from last time
+    vector<vector<double>> trajectory(2); // [0]: x, [1]: y
     for (int i = 0; i < _previous_path_x.size(); i++) {
         trajectory[0].push_back(_previous_path_x[i]);
         trajectory[1].push_back(_previous_path_y[i]);
@@ -150,32 +272,11 @@ vector<vector<double>> Planner::generateTrajectory(int target_lane) {
         ptsy.push_back(start_y);
     }
 
-    // determine the target of the new trajectory, 
-    // depending on the front vehicle info
-    double target_speed = SPEED_LIMIT, target_s = _ego._s + PLANNING_DIST; 
-    double last_dist = start_s - _ego._s; // the speed was already calulated in the last round up to last_dist
-    
-    Vehicle front_vehicle;
-    bool found = getFrontVehicle(target_lane, front_vehicle);
-    if (found) {
-        double front_dist = _road.distance(front_vehicle, _ego);
-        double full_speed_dist = fullSpeedDist(front_vehicle._v) + last_dist;
-        cout << "front dist: " << front_dist << " full speed dist: " << full_speed_dist;
-        cout << " front speed: " << front_vehicle._v  << endl;
-
-        if (front_dist < full_speed_dist && front_dist > DIST_BUFFER ) {
-            target_speed = front_vehicle._v;
-        } else if (front_dist < DIST_BUFFER) {
-            target_speed = min(5.0, front_vehicle._v);
-        }
-
-        // warp up
-        double front_s = (front_vehicle._s < _ego._s)? front_vehicle._s + _road.MAX_S : front_vehicle._s;
-        target_s = min(front_s + front_vehicle._v*TIME_STEP*prev_size, target_s);
-    }
-
-    cout << "targe speed: " << target_speed  << " ego v: " << _ego._v << endl;
-    cout << "target s: " << target_s << " ego s: " << _ego._s << " end path s: " << _end_path_s << endl;
+    cout << "target lane: " << target_lane << " ego lane: " << _ego._lane << endl;
+    cout << "front dist: " << target_lane_info._front_dist << endl;
+    cout << "front speed: " << target_lane_info._front_speed << " ego speed: " << _ego._v << endl;
+    cout << "targe speed: " << target_speed << endl;
+   
     double s_gap = target_s - start_s;
 
     double target_d = _road.laneCenter(target_lane);
