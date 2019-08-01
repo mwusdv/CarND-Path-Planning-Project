@@ -1,6 +1,50 @@
 # CarND-Path-Planning-Project
 Self-Driving Car Engineer Nanodegree Program
    
+### Goals
+In this project your goal is to safely navigate around a virtual highway with other traffic that is driving +-10 MPH of the 50 MPH speed limit. You will be provided the car's localization and sensor fusion data, there is also a sparse map list of waypoints around the highway. The car should try to go as close as possible to the 50 MPH speed limit, which means passing slower traffic when possible, note that other cars will try to change lanes too. The car should avoid hitting other cars at all cost as well as driving inside of the marked road lanes at all times, unless going from one lane to another. The car should be able to make one complete loop around the 6946m highway. Since the car is trying to go 50 MPH, it should take a little over 5 minutes to complete 1 loop. Also the car should not experience total acceleration over 10 m/s^2 and jerk that is greater than 10 m/s^3.
+
+### Classes in the code
+* Vehicle: maintaning the vehicle parameters like speed, position, lane, etc. 
+* Road: computing distance between two vehicles, determining the front and rear vehicles, etc.
+* Planner: The core component for path planning.
+
+### Logic of Path Planning.
+Here are the key componets implemented for path planning.
+
+* **Prediction**. Implemented in the function `Planner::generatePredictions`. Given the vehciles on the road, their positions at the next time step (in 0.02 seconds) are predicted. In addition to the position within their current lanes, their possible positions at the adjacent lanes are also predicted, if their `d` values indicate that they are close to the lane boundary. Therefore the function `Planner::generatePredictions` outputs a list of predicted vehicles whose number may be larger than the actual number of the vehciles. Because one vehcile could have multiple possible future positions in the next time step, depending on whether it may make a lane change.
+
+* **Choosing the target lane and the target speed.** Implemented in the function `Planner::chooseLane`. This function evaluates the ego lane and possible ajacent lanes, and chooses the best one accoring to a evaluation score. 
+
+* **Evaluating a lane.** Implemented in the function `Planner::evaluateLane`. For a given lane, this function evaluates the score if we move to (or stay in) this lane by prodviding a score. The larger the score, the better. The logic of computing the evaluation score is as the following: 
+    
+    * If the given lane is different from the ego lane, then first check the vehicle behind in the given lane. If the distance between the ego vehice and the vehcile behind is smaller than the threshold `Planner::DIST_BUFFER`, then the score for this lane is 0.
+
+    * Check the distance between the front vehcile in the given lane and the ego vehicle. Based on this distance, we can obtain the `target_speed` if we want to move to (or stay in) this lane. 
+
+        * If the distance is large enough, the `target_speed` can be maximum, namely `Planner::SPEED_LIMIT`
+        * If the distance is not long enough for full speed, but larger than the threshold `Planner::DIST_BUFFER`, then `target_speed` is the same as the speed of the front vehicle. Namely we want to keep the same speed as the front vehicle on this given lane.
+        * If the disance is smaller than `Planner::DIST_BUFFER`, which means the ego vehicle is too close to the front vehicle, then `targe_speed = min(5, front_vehicle._v)`. So in the case, we aggressively lower the speed to avoid collision.
+    
+    * Once we get the `target_speed` for the given lane, then the score is computed as `target_speed - 2*abs(lane_info._lane - _ego._lane)`. That is, we prefer higher target speed, but at the same time we prefer staying in the ego lane if the target speed in the given lane is not much higher than the speed in the ego lane.
+
+* **Generating the trajectory**. Implemented in funtion `Planner::generateTrajectory`. Onece the target lane and target speed is selected, I use the spline to generate the trajectory, suggested by the course material. 
+
+## Result and Reflections
+
+The planner described above can work pretty well. As can be seen in the screen shot, it can run more than 35 miles without any incidents (I stopped the simulater manually then). 
+
+![Example](screenshot.png)
+
+However during the experiments, I did see some collisions, here are my solutions and throughs:
+
+* **Reduce the number of trajectory points.** Parameter `Planner::NUM_TRAJECTORY_POINTS` specifies the number of points in the generated trajctory. Currently the design is to let the ego vechile finish the trajectory points, which are generated some time steps before. Therefore, if the number of trajectory is too long, something may  in the middle of the trajectory. For example a vehcile makes a lane change. This change may not be seen several time steps before when the trajectory is generated. To avoid this problem, I reduce the  `Planner::NUM_TRAJECTORY_POINTS` to 25, i.e. 0.5 seconds.
+
+* **More accurate predictions.** Reducing the number of points in the trajectory is helpful. But I could still see collisions sometimes. Current predictions is very rough. A leaned predition model should be better. However, current code framework does not provide the derivative values with respect to and `s` and `d`, so the Navie Baysian classifiers we built in the course cannot be applied directly.
+
+* **Local and greedy approach.** Currently the approach is local and greedy. Namely, it just sees the ajacent lanes and choose the one with the maximal target speed. However, sometimes, it may be better to first move to a slower lane and then further change to another lane that is faster than the ego lane. That requires more complicated cost functions.
+
+## Origial README
 ### Simulator.
 You can download the Term3 Simulator which contains the Path Planning Project from the [releases tab (https://github.com/udacity/self-driving-car-sim/releases/tag/T3_v1.2).  
 
