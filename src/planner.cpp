@@ -55,16 +55,6 @@ void Planner::getPreviousPath(const vector<double>& previous_path_x, const vecto
     _previous_path_y = previous_path_y;
     _end_path_s = end_path_s;
     _end_path_d = end_path_d;
-
-    // speed at the end of the previous trajectory
-    int prev_size = _previous_path_x.size();
-    if (prev_size < 2) {
-        _end_v = _ego._v;
-    } else {
-        double dx = _previous_path_x[prev_size-1] - _previous_path_x[prev_size-2];
-        double dy = _previous_path_y[prev_size-1] - _previous_path_y[prev_size-2];
-        _end_v = sqrt(dx*dx + dy*dy) / TIME_STEP;
-    }
 }
 
 bool Planner::getFrontVehicle(int lane, Vehicle& front_vehicle) {
@@ -211,8 +201,8 @@ void Planner::chooseLane(int& target_lane, double& target_s, double& target_spee
 
         cout << "checking lane: " << cur_lane << endl;
         cout << "front dist: " << cur_info._front_dist << " front speed: " << cur_info._front_speed << endl;
-        cout << "rear dist: " << cur_info._rear_dist << " rear speed: " << cur_info._rear_speed << endl;
-        
+        cout << "rear dist: " << cur_info._rear_dist << " rear speed: " << cur_info._rear_speed << endl << endl;
+
         if (score > best_score) {
             best_score = score;
             target_lane = cur_lane;
@@ -254,6 +244,7 @@ vector<vector<double>> Planner::generateTrajectory() {
     double start_x = _ego._x;
     double start_y = _ego._y;
     double start_yaw = _ego._yaw;
+    double start_v = _ego._v;
 
     // build spline points
     vector<double> ptsx;
@@ -280,16 +271,23 @@ vector<vector<double>> Planner::generateTrajectory() {
 
         ptsy.push_back(prev_y);
         ptsy.push_back(start_y);
+
+        double dx = _previous_path_x[prev_size-1] - _previous_path_x[prev_size-2];
+        double dy = _previous_path_y[prev_size-1] - _previous_path_y[prev_size-2];
+        start_v = sqrt(dx*dx + dy*dy) / TIME_STEP;
     }
 
-    cout << "target lane: " << target_lane << " ego lane: " << _ego._lane << endl;
-    cout << "front dist: " << target_lane_info._front_dist << endl;
-    cout << "front speed: " << target_lane_info._front_speed << " ego speed: " << _ego._v << endl;
-    cout << "targe speed: " << target_speed << endl;
-    cout << "target s: " << target_s << " ego s: " << _ego._s << endl;
+   // target and ego info
+    cout << "target lane: " << target_lane
+         << " target speed " << target_speed 
+         << " front dist: " << target_lane_info._front_dist 
+         << " front speed: " << target_lane_info._front_speed << endl;
+    
+    cout << "ego lane: " << _ego._lane
+         << " ego s: " << _ego._s
+         << " ego speed " << _ego._v << endl;
    
     double s_gap = target_s - start_s;
-    cout << "s_gap: " << s_gap << endl;
 
     double target_d = _road.laneCenter(target_lane);
     vector<double> next_wp0 = getXY(start_s + s_gap, target_d, _road._map_waypoints_s,
@@ -328,8 +326,7 @@ vector<vector<double>> Planner::generateTrajectory() {
 
     double x0 = 0, y0 = 0, v0 = _ego._v;
     double x = 0, y = 0;
-    double v = _end_v;
-    cout << "end_v: " << _end_v << endl;
+    double v = start_v;
 
     // Fill up the rest of our path planner after filling it with previous points, here we will always output 50 points
     cout << "prev_size: " << prev_size << endl;

@@ -74,8 +74,8 @@ int main() {
            * TODO: define a path made up of (x,y) points that the car will visit
            *   sequentially every .02 seconds
            */
-          //cout << "update cars." << endl;
-          cout << endl;
+          //start a new planning round
+          cout << endl << "----------------------------------------------------" << endl;
           planner.updateEgo(car_x, car_y, car_s, car_d, car_speed, car_yaw);
           planner.updateRoadVehicles(sensor_fusion);
           planner.getPreviousPath(previous_path_x, previous_path_y, end_path_s, end_path_d);
