@@ -68,6 +68,9 @@ public:
     // minimum distance beyond which ego car can drive full speed
     double fullSpeedDist(double front_speed);
 
+    // starting point of the new trajectory
+    double newTrajectoryStartS();
+
     // validate a trajectory
     void validTrajectory(const vector<double>& x_points, const vector<double>& y_points);
 

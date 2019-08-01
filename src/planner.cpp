@@ -145,14 +145,8 @@ LaneInfo Planner::checkLane(int lane) {
     return lane_info;
 }
 
-// evaluate running on a lane
-double Planner::evaluateLane(const LaneInfo& lane_info, double& target_s, double& target_speed) {
-    // if possibly collide with rear vehicle, then score is 0
-    if (lane_info._lane != _ego._lane && lane_info._rear_dist < DIST_BUFFER) {
-        return 0;
-    }
-
-    // starting point of the new trajectory to be calculated
+// starting point of the new trajectory
+double Planner::newTrajectoryStartS() {
     int prev_size = _previous_path_x.size();
     double start_s = _ego._s;
     if (prev_size > 0) {
@@ -161,6 +155,19 @@ double Planner::evaluateLane(const LaneInfo& lane_info, double& target_s, double
             start_s += _road.MAX_S;
         }
     }
+
+    return start_s;
+}
+
+// evaluate running on a lane
+double Planner::evaluateLane(const LaneInfo& lane_info, double& target_s, double& target_speed) {
+    // if possibly collide with rear vehicle, then score is 0
+    if (lane_info._lane != _ego._lane && lane_info._rear_dist < DIST_BUFFER) {
+        return 0;
+    }
+
+    // starting point of the new trajectory to be calculated
+    double start_s = newTrajectoryStartS();
 
     // compute target s and target speed on the given lane
     // based on the front vehicle info
@@ -181,7 +188,7 @@ double Planner::evaluateLane(const LaneInfo& lane_info, double& target_s, double
     //target_s = min(front_s + lane_info._front_speed*TIME_STEP*prev_size, target_s);
 
     // score: we prefer higher speed, same lane
-    return target_speed - 1*abs(lane_info._lane - _ego._lane) - 2*abs(lane_info._lane - 1);
+    return target_speed - 2*abs(lane_info._lane - _ego._lane);
 }
 
 // choose next lane
@@ -231,24 +238,17 @@ vector<vector<double>> Planner::generateTrajectory() {
         //cout << "Prev " << _previous_path_x[i] << ", " << _previous_path_y[i] << endl;
     }
     
-    // starting point of the new trajectory to be calculated
-    int prev_size = _previous_path_x.size();
-    double start_s = _ego._s;
-    if (prev_size > 0) {
-        start_s = _end_path_s;
-        if (start_s < _ego._s) {
-            start_s += _road.MAX_S;
-        }
-    }
-
+    // starting point and speed of the new trajectory to be calculated 
     double start_x = _ego._x;
     double start_y = _ego._y;
     double start_yaw = _ego._yaw;
     double start_v = _ego._v;
+    double start_s = newTrajectoryStartS();
 
     // build spline points
     vector<double> ptsx;
     vector<double> ptsy;
+    int prev_size = _previous_path_x.size();
     if (prev_size < 2) {
         double prev_car_x = _ego._x - cos(_ego._yaw);
         double prev_car_y = _ego._y - sin(_ego._yaw);
@@ -329,7 +329,7 @@ vector<vector<double>> Planner::generateTrajectory() {
     double v = start_v;
 
     // Fill up the rest of our path planner after filling it with previous points, here we will always output 50 points
-    cout << "prev_size: " << prev_size << endl;
+    //cout << "prev_size: " << prev_size << endl;
     if (v < target_speed) {
         v += min(target_speed - v, ACCEL_LIMIT * TIME_STEP);
     } else if (v > target_speed) {
