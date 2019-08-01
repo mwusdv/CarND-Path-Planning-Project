@@ -184,7 +184,7 @@ double Planner::evaluateLane(const LaneInfo& lane_info, double& target_s, double
 
     // target s
     target_s = start_s + PLANNING_DIST;    // warp up
-    double front_s = (lane_info._front_s < _ego._s)? lane_info._front_s + _road.MAX_S : lane_info._front_s;
+    //double front_s = (lane_info._front_s < _ego._s)? lane_info._front_s + _road.MAX_S : lane_info._front_s;
     //target_s = min(front_s + lane_info._front_speed*TIME_STEP*prev_size, target_s);
 
     // score: we prefer higher speed, same lane

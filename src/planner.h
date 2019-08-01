@@ -84,7 +84,7 @@ public:
     double _end_path_s;
     double _end_path_d;
 
-    const int NUM_TRAJECTORY_POINTS = 50;
+    const int NUM_TRAJECTORY_POINTS = 25; // 0.5 seconds
     const double PLANNING_DIST = 30; // at most planning the next 30 meters
     const double TIME_STEP = 0.02;
     const double SPEED_LIMIT = 49.5*1600.0/3600;  // m/s
