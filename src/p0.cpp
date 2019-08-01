@@ -186,12 +186,12 @@ double Planner::evaluateLane(const LaneInfo& lane_info, double& target_s, double
     }
 
     // target s
-    target_s = start_s + PLANNING_DIST;    // warp up
+    target_s = _ego._s + PLANNING_DIST;    // warp up
     double front_s = (lane_info._front_s < _ego._s)? lane_info._front_s + _road.MAX_S : lane_info._front_s;
-    //target_s = min(front_s + lane_info._front_speed*TIME_STEP*prev_size, target_s);
+    target_s = min(front_s + lane_info._front_speed*TIME_STEP*prev_size, target_s);
 
     // score: we prefer higher speed, same lane
-    return target_speed - 1*abs(lane_info._lane - _ego._lane) - 2*abs(lane_info._lane - 1);
+    return target_speed - 2*abs(lane_info._lane - _ego._lane);
 }
 
 // choose next lane
@@ -286,26 +286,24 @@ vector<vector<double>> Planner::generateTrajectory() {
     cout << "front dist: " << target_lane_info._front_dist << endl;
     cout << "front speed: " << target_lane_info._front_speed << " ego speed: " << _ego._v << endl;
     cout << "targe speed: " << target_speed << endl;
-    cout << "target s: " << target_s << " ego s: " << _ego._s << endl;
    
     double s_gap = target_s - start_s;
-    cout << "s_gap: " << s_gap << endl;
 
     double target_d = _road.laneCenter(target_lane);
-    vector<double> next_wp0 = getXY(start_s + s_gap, target_d, _road._map_waypoints_s,
+    vector<double> next_wp0 = getXY(start_s + s_gap/2, target_d, _road._map_waypoints_s,
                                     _road._map_waypoints_x, _road._map_waypoints_y);
-    vector<double> next_wp1 = getXY(start_s + s_gap*2, target_d, _road._map_waypoints_s,
+    vector<double> next_wp1 = getXY(start_s + s_gap, target_d, _road._map_waypoints_s,
                                     _road._map_waypoints_x, _road._map_waypoints_y);
-    vector<double> next_wp2 = getXY(start_s + s_gap*3, target_d, _road._map_waypoints_s,
-                                    _road._map_waypoints_x, _road._map_waypoints_y);
-   
+    //vector<double> next_wp2 = getXY(start_s + s_gap, target_d, _road._map_waypoints_s,
+    //                                _road._map_waypoints_x, _road._map_waypoints_y);
+    
     ptsx.push_back(next_wp0[0]);
     ptsx.push_back(next_wp1[0]);
-    ptsx.push_back(next_wp2[0]);
+    //ptsx.push_back(next_wp2[0]);
     
     ptsy.push_back(next_wp0[1]);
     ptsy.push_back(next_wp1[1]);
-    ptsy.push_back(next_wp2[1]);
+    //ptsy.push_back(next_wp2[1]);
 
     for (size_t i = 0; i < ptsx.size(); i++) {
         // shift car reference angle to 0 degree
@@ -333,16 +331,31 @@ vector<vector<double>> Planner::generateTrajectory() {
 
     // Fill up the rest of our path planner after filling it with previous points, here we will always output 50 points
     cout << "prev_size: " << prev_size << endl;
-    if (v < target_speed) {
-        v += min(target_speed - v, ACCEL_LIMIT * TIME_STEP);
-    } else if (v > target_speed) {
-        v -= min(v - target_speed, ACCEL_LIMIT * TIME_STEP);
-    }
-    
     for (int i = 0; i < NUM_TRAJECTORY_POINTS - prev_size; ++i) {
-        double N = target_dist / (TIME_STEP * v);  // each TIME_STEP a new point is reached
-        x += target_x/N;
-        double y = s(x);
+        if (v < target_speed) {
+            v += min(target_speed - v, ACCEL_LIMIT * TIME_STEP);
+        } else if (v > target_speed) {
+            v -= min(v - target_speed, ACCEL_LIMIT * TIME_STEP);
+        }
+        cout << "v_i: " << v << endl;
+
+        // determine the next point on the spline
+        double accel = 100000;
+        double step_ratio = 1.0;
+        while (accel > ACCEL_LIMIT) {
+            double step = TIME_STEP * v * step_ratio;
+            x = x0 + step*d_ratio;
+            y = s(x);
+            double dx = x-x0, dy = y-y0;
+            double v = sqrt(dx*dx + dy*dy) / TIME_STEP;
+            accel = (v-v0)/TIME_STEP;
+            //cout << "v: " << v << " a: " << accel << endl;
+            step_ratio *= 0.9;
+        }
+        x0 = x;
+        y0 = y;
+        v0 = v;
+        //cout << "x: " << x <<  " y: " << y << endl;
 
         // rotating back to normal after rotating it earlier
         double x_point = (x * cos(start_yaw) - y * sin(start_yaw));
@@ -360,7 +373,7 @@ vector<vector<double>> Planner::generateTrajectory() {
 
     //cout << endl << "trajectory y: " << endl;
     //showVector(trajectory[1]);
-    //validTrajectory(trajectory[0], trajectory[1]);
+    validTrajectory(trajectory[0], trajectory[1]);
     return trajectory;
 }
 
